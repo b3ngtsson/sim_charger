@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 import requests
 
-API_KEY = "02a5dc85-4171-4568-a60d-fdb19641ae24" #os.environ.get('OPENCHARGE_KEY')  
+API_KEY = os.environ.get('OPENCHARGE_KEY')  
 
 # OpenChargeMap API
 OCM_URL = "https://api.openchargemap.io/v3/poi/"
