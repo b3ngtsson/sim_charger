@@ -16,7 +16,7 @@ OCM_PARAMS = {
     "maxresults": 10,
     "distance": 20,
     "distanceunit": "km",
-    "key": "02a5dc85-4171-4568-a60d-fdb19641ae24"
+    "key": ""
 }
 
 # Default parameters
