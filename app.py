@@ -5,7 +5,7 @@ import math
 import matplotlib.colors as mcolors
 from typing import List, Dict, Optional
 import os
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
 
 # OSRM API endpoint
 OSRM_URL = "http://router.project-osrm.org/route/v1/driving/{},{};{},{}?overview=full&geometries=geojson"
@@ -308,4 +308,5 @@ def calculate_route():
         return {"error": str(e)}, 400
     
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
