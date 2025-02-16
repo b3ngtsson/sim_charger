@@ -4,11 +4,12 @@ import requests
 import math
 import matplotlib.colors as mcolors
 from typing import List, Dict, Optional
-
+import os
 app = Flask(__name__)
 
 # OSRM API endpoint
 OSRM_URL = "http://router.project-osrm.org/route/v1/driving/{},{};{},{}?overview=full&geometries=geojson"
+API_KEY = os.environ.get('OPENCHARGE_KEY')  
 
 # OpenChargeMap API
 OCM_URL = "https://api.openchargemap.io/v3/poi/"
@@ -16,7 +17,7 @@ OCM_PARAMS = {
     "maxresults": 10,
     "distance": 20,
     "distanceunit": "km",
-    "key": ""
+    "key": API_KEY
 }
 
 # Default parameters
