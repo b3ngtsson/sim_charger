@@ -3,3 +3,4 @@ folium
 requests
 matplotlib
 gunicorn
+python-dotenv

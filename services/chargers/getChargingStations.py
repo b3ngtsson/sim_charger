@@ -1,8 +1,14 @@
 from typing import List, Dict
 import requests
 import os
+from dotenv import load_dotenv
 
-API_KEY = os.environ.get('OPENCHARGE_KEY')  
+
+API_KEY = os.environ.get('OPENCHARGE_KEY') 
+if API_KEY is None:
+    load_dotenv()
+    API_KEY = os.getenv('OPENCHARGE_KEY')
+
 
 # OpenChargeMap API
 OCM_URL = "https://api.openchargemap.io/v3/poi/"

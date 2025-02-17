@@ -8,6 +8,8 @@ from services.route.haversine import haversine
 
 def create_map(routes: List[List[List[float]]], soc_values: List[List[float]], charging_stops: List[Dict], start: List[float], end: List[float], avg_speed: float = 80.0):
     """Create Folium map with route and charging stations"""
+    if not routes:
+        return folium.Map(location=[59.3230558, 18.0747222], zoom_start=10)._repr_html_()  # Return an empty string for an empty map
     m = folium.Map(location=start, zoom_start=10)
     cumulative_time = 0
     for route, socs in zip(routes, soc_values):

@@ -34,6 +34,7 @@ MAX_KW = 150
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
+        print("post in /")
         start = request.form["start"].split(",")
         end = request.form["end"].split(",")
         min_kw = request.form["minKw"]
@@ -95,8 +96,15 @@ def index():
     
     return render_template('index.html')
 
-@app.route('/calculate', methods=['POST'])
+@app.route('/calculate', methods=['GET','POST'])
 def calculate_route():
+    if request.method == 'GET':
+        print("get in /calculate")
+        map_html = create_map([], [], [], "", "", 0)
+        return {
+            "map_html": map_html
+        }
+       
     print(f"calculate")
     data = request.get_json()
     print(f"data {data}")
