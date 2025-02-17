@@ -1,5 +1,6 @@
-from typing import List, Dict, Optional
+from typing import List, Dict
 import requests
+import os
 
 API_KEY = os.environ.get('OPENCHARGE_KEY')  
 
