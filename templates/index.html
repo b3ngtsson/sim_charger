@@ -1,10 +1,11 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>EV Route Planner</title>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/css/all.min.css">
-        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             body {
@@ -12,22 +13,27 @@
                 padding: 0;
                 font-family: 'Poppins', sans-serif;
                 color: #495057;
+                height: 100vh;
+                overflow: hidden;
+            }
+            .layout-container {
+                display: flex;
+                height: 100vh;
             }
             #sidebar {
                 width: 350px;
                 height: 100vh;
-                position: fixed;
-                left: 0;
-                top: 0;
                 overflow-y: auto;
                 padding: 20px;
                 background: #f8f9fa;
                 border-right: 1px solid #dee2e6;
+                transition: all 0.3s;
+                z-index: 10;
             }
             #map-container {
-                margin-left: 350px; /* equal to the width of sidebar */
-                height: calc(100vh - 48px); /* subtract navbar's height */
-                overflow: auto; /* add scroll if content exceeds viewport */
+                flex: 1;
+                height: 100vh;
+                position: relative;
             }
             #map {
                 height: 100%;
@@ -40,55 +46,154 @@
                 background-color: #1a8fdc;
                 border-color: #1a8fdc;
             }
+            .btn-primary:hover {
+                background-color: #0d6efd;
+                border-color: #0d6efd;
+            }
+            #loading {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(255,255,255,0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                flex-direction: column;
+            }
+            .spinner-border {
+                width: 3rem;
+                height: 3rem;
+            }
+            .loading-text {
+                margin-top: 1rem;
+                font-size: 1.2rem;
+            }
+            @media (max-width: 768px) {
+                .layout-container {
+                    flex-direction: column;
+                }
+                #sidebar {
+                    width: 100%;
+                    height: auto;
+                    max-height: 50vh;
+                }
+                #map-container {
+                    height: 50vh;
+                }
+            }
+            #toggleSidebar {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                z-index: 100;
+                display: none;
+            }
+            @media (max-width: 768px) {
+                #toggleSidebar {
+                    display: block;
+                }
+            }
+            .sidebar-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
         </style>
     </head>
-<body  onLoad=initMap()>
-    <div id="sidebar">
-        <h3 class="mb-4">EV Route Planner</h3>
-        <form id="routeForm" onsubmit="return calculateRoute(event)">
-            <div class="form-group">
-                <label class="form-label">Start Address</label>
-                <input type="text" class="form-control" id="start" required>
+<body>
+    <div id="loading" class="d-none">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="loading-text">Calculating route...</div>
+    </div>
+    
+    <div class="layout-container">
+        <div id="sidebar">
+            <div class="sidebar-header">
+                <h3 class="mb-4">EV Route Planner</h3>
+                <button id="closeSidebar" class="btn btn-sm btn-outline-secondary d-md-none">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="form-group">
-                <label class="form-label">End Address</label>
-                <input type="text" class="form-control" id="end" required>
+            
+            <form id="routeForm">
+                <div class="form-group">
+                    <label class="form-label">Start Location (lat,lng)</label>
+                    <input type="text" class="form-control" id="start" placeholder="e.g. 59.3293,18.0686" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">End Location (lat,lng)</label>
+                    <input type="text" class="form-control" id="end" placeholder="e.g. 57.7089,11.9746" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Battery Capacity (kWh)</label>
+                    <input type="number" class="form-control" id="battery" step="0.1" placeholder="e.g. 75" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Initial SOC (%)</label>
+                    <input type="number" class="form-control" id="soc" value="80" min="0" max="100">
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <div class="form-group">
+                            <label class="form-label">Min kW</label>
+                            <input type="number" class="form-control" id="minKw" value="50" min="0" max="1000">
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="form-group">
+                            <label class="form-label">Max kW</label>
+                            <input type="number" class="form-control" id="maxKw" value="150" min="1" max="1000">
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Calculate Route</button>
+            </form>
+            
+            <div id="results" class="mt-4">
+                <div id="error" class="alert alert-danger d-none"></div>
+                <div id="timeInfo" class="alert alert-info d-none"></div>
+                <div id="chargingStops" class="d-none">
+                    <h5>Charging Stops:</h5>
+                    <ul class="list-group" id="stopsList"></ul>
+                </div>
             </div>
-            <div class="form-group">
-                <label class="form-label">Battery Capacity (kWh)</label>
-                <input type="number" class="form-control" id="battery" step="0.1" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Initial SOC (%)</label>
-                <input type="number" class="form-control" id="soc" value="80" min="0" max="100">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Minimum KW charger</label>
-                <input type="number" class="form-control" id="minKw" value="50" min="0" max="1000">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Maximum KW charger</label>
-                <input type="number" class="form-control" id="maxKw" value="150" min="1" max="1000">
-            </div>
-            <button type="submit" class="btn btn-primary">Calculate Route</button>
-        </form>
-        <div id="results" class="mt-4">
-            <div id="error" class="alert alert-danger d-none"></div>
-            <div id="timeInfo" class="alert alert-info d-none"></div>
-            <div id="chargingStops" class="d-none">
-                <h5>Charging Stops:</h5>
-                <ul class="list-group" id="stopsList"></ul>
-            </div>
+        </div>
+
+        <div id="map-container">
+            <button id="toggleSidebar" class="btn btn-light">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div id="map"></div>
         </div>
     </div>
 
-    <div id="map-container">
-        <div id="map"></div>
-    </div>
-
     <script>
-        function calculateRoute(e) {
+        // Initialize map on load
+        document.addEventListener('DOMContentLoaded', initMap);
+        
+        // Setup form submission
+        document.getElementById('routeForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            calculateRoute();
+        });
+        
+        // Mobile sidebar toggle
+        document.getElementById('toggleSidebar').addEventListener('click', function() {
+            document.getElementById('sidebar').style.display = 'block';
+        });
+        
+        document.getElementById('closeSidebar').addEventListener('click', function() {
+            document.getElementById('sidebar').style.display = 'none';
+        });
+        
+        function calculateRoute() {
+            // Show loading spinner
+            document.getElementById('loading').classList.remove('d-none');
             
             // Clear previous results
             document.getElementById('error').classList.add('d-none');
@@ -111,8 +216,16 @@
                 },
                 body: JSON.stringify(formData)
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(data => {
+                // Hide loading spinner
+                document.getElementById('loading').classList.add('d-none');
+                
                 if (data.error) {
                     showError(data.error);
                     return;
@@ -123,27 +236,37 @@
                 mapElement.innerHTML = data.map_html;
                 
                 // Update time info
-                document.getElementById('timeInfo').innerHTML = 
-                    `Total Estimated Time: ${data.total_time.toFixed(1)} minutes`;
-                document.getElementById('timeInfo').classList.remove('d-none');
+                const timeInfo = document.getElementById('timeInfo');
+                timeInfo.innerHTML = `Total Estimated Time: ${data.total_time.toFixed(1)} minutes (${(data.total_time / 60).toFixed(1)} hours)`;
+                timeInfo.classList.remove('d-none');
                 
                 // Update charging stops
                 const stopsList = document.getElementById('stopsList');
                 stopsList.innerHTML = '';
-                if (data.charging_stops.length > 0) {
+                if (data.charging_stops && data.charging_stops.length > 0) {
                     data.charging_stops.forEach(stop => {
                         const li = document.createElement('li');
                         li.className = 'list-group-item';
                         li.innerHTML = `
-                            ${stop.station.name} (${stop.station.power} kW)<br>
-                            Charge Time: ${stop.charge_time.toFixed(1)} minutes
+                            <strong>${stop.station.name}</strong> (${stop.station.power} kW)<br>
+                            Charge Time: ${stop.charge_time.toFixed(1)} minutes<br>
+                            Amount: +${stop.charge_amount.toFixed(1)}%
                         `;
                         stopsList.appendChild(li);
                     });
                     document.getElementById('chargingStops').classList.remove('d-none');
                 }
+                
+                // On mobile, close sidebar to show map
+                if (window.innerWidth <= 768) {
+                    document.getElementById('sidebar').style.display = 'none';
+                }
             })
-            .catch(error => showError(error.message));
+            .catch(error => {
+                document.getElementById('loading').classList.add('d-none');
+                showError(error.message || 'An error occurred while calculating the route');
+                console.error('Error:', error);
+            });
         }
 
         function showError(message) {
@@ -151,11 +274,17 @@
             errorDiv.textContent = message;
             errorDiv.classList.remove('d-none');
         }
+        
         function initMap() {
-        fetch('/calculate', {
+            fetch('/calculate', {
                 method: 'GET',
             })
-            .then(response => response.json() )//response.json()
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
                     showError(data.error);
@@ -164,14 +293,18 @@
                 
                 // Update map
                 const mapElement = document.getElementById('map');
-                mapElement.innerHTML = data.map_html;  
+                mapElement.innerHTML = data.map_html;
+                
+                // Populate with example values for demo
+                document.getElementById('start').value = '59.3293,18.0686'; // Stockholm
+                document.getElementById('end').value = '57.7089,11.9746'; // Gothenburg
+                document.getElementById('battery').value = '75';
             })
-            .catch((error) => console.error('Error:', error));
-    }
-
-    function showError(errorMessage) {
-        alert("An error occurred: " + errorMessage);
-    }
+            .catch(error => {
+                console.error('Error initializing map:', error);
+                showError('Error loading map. Please refresh the page.');
+            });
+        }
     </script>
 </body>
 </html>

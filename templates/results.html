@@ -1,30 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Route Results</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <title>EV Route Planner - Results</title>
+    <script src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
+    <script src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
+    <script src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
+    <link rel="stylesheet" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
 </head>
 <body>
-    <div class="container mt-5">
-        <h1>Route from {{ start }} to {{ end }}</h1>
-        <div class="alert alert-info">
-            Total Estimated Time: {{ "%.1f"|format(total_time) }} minutes
-        </div>
-        {% if charging_stops %}
-        <h3>Charging Stops:</h3>
-        <ul class="list-group mb-4">
+    <div id="map" style="width: 100%; height: 70vh;"></div>
+    <div class="container mt-4">
+        <h2>Total Estimated Time: {{ total_time|round(1) }} minutes</h2>
+        <h3 class="mt-3">Charging Stops:</h3>
+        <ul class="list-group">
             {% for stop in charging_stops %}
             <li class="list-group-item">
-                {{ stop.station.name }} ({{ stop.station.power }} kW) - 
-                Charge Time: {{ "%.1f"|format(stop.charge_time) }} minutes
+                {{ stop.station.name }} ({{ stop.station.power }} kW) - {{ stop.charge_time|round(1) }} minutes
             </li>
             {% endfor %}
         </ul>
-        {% endif %}
-        <div class="map-container">
-            {{ map_html|safe }}
-        </div>
-        <a href="/" class="btn btn-secondary mt-3">New Calculation</a>
     </div>
+
+    <script>
+        const mapData = JSON.parse('{{ map_data | tojson | safe }}');
+        
+        // Initialize HERE Map
+        const platform = new H.service.Platform({
+            apikey: '{{ here_api_key }}'
+        });
+
+        const defaultLayers = platform.createDefaultLayers();
+        const map = new H.Map(
+            document.getElementById('map'),
+            defaultLayers.vector.normal.map,
+            {
+                center: { lat: mapData.start[0], lng: mapData.start[1] },
+                zoom: 10,
+                pixelRatio: window.devicePixelRatio || 1
+            }
+        );
+
+        // Add route polylines
+        mapData.routes.forEach(route => {
+            const lineString = new H.geo.LineString();
+            route.coordinates.forEach(coord => 
+                lineString.pushPoint({ lat: coord[0], lng: coord[1] }));
+            
+            const polyline = new H.map.Polyline(lineString, {
+                style: {
+                    lineWidth: 4,
+                    strokeColor: getColorForSOC(route.soc[0])
+                }
+            });
+            map.addObject(polyline);
+        });
+
+        // Add markers
+        new H.map.Marker({ lat: mapData.start[0], lng: mapData.start[1] }, {
+            icon: new H.map.Icon('/static/markers/green.png')
+        }).addTo(map);
+
+        new H.map.Marker({ lat: mapData.end[0], lng: mapData.end[1] }, {
+            icon: new H.map.Icon('/static/markers/red.png')
+        }).addTo(map);
+
+        mapData.charging_stops.forEach(stop => {
+            new H.map.Marker({ lat: stop.location[0], lng: stop.location[1] }, {
+                icon: new H.map.Icon('/static/markers/charging.png'),
+                data: `${stop.name} (${stop.power} kW)`
+            }).addTo(map);
+        });
+
+        function getColorForSOC(soc) {
+            const hue = soc * 1.2;
+            return `hsl(${hue}, 100%, 50%)`;
+        }
+
+        window.addEventListener('resize', () => map.getViewPort().resize());
+    </script>
 </body>
 </html>
