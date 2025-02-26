@@ -151,6 +151,15 @@
                         </div>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Routing Strategy</label>
+                    <select class="form-select" id="routingStrategy">
+                        <option value="standard" selected>Standard</option>
+                        <option value="optimized_waypoints">Optimized Waypoints</option>
+                        <option value="dijkstra">Dijkstra</option>
+                        <option value="time_efficient">Time Efficient</option>
+                    </select>
+                </div>
                 <button type="submit" class="btn btn-primary w-100">Calculate Route</button>
             </form>
             
@@ -206,7 +215,8 @@
                 battery: document.getElementById('battery').value,
                 soc: document.getElementById('soc').value,
                 minKw: document.getElementById('minKw').value,
-                maxKw: document.getElementById('maxKw').value
+                maxKw: document.getElementById('maxKw').value,
+                routingStrategy: document.getElementById('routingStrategy').value
             };
 
             fetch('/calculate', {

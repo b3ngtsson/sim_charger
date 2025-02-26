@@ -114,10 +114,17 @@ def create_map(routes, soc_values, charging_stops, start, end, avg_speed):
     
     # Fit map to bounds
     all_points = [point for route in routes for point in route]
-    m.fit_bounds([
-        [min(p[0] for p in all_points), min(p[1] for p in all_points)],
-        [max(p[0] for p in all_points), max(p[1] for p in all_points)]
-    ])
+    if all_points:
+        m.fit_bounds([
+            [min(p[0] for p in all_points), min(p[1] for p in all_points)],
+            [max(p[0] for p in all_points), max(p[1] for p in all_points)]
+        ])
+    else:
+        # If no route points, fit to start and end
+        m.fit_bounds([
+            [min(float(start[0]), float(end[0])), min(float(start[1]), float(end[1]))],
+            [max(float(start[0]), float(end[0])), max(float(start[1]), float(end[1]))]
+        ])
     
     # Return the map as HTML
     return m._repr_html_()

@@ -1,7 +1,14 @@
-from flask import Flask, request, jsonify
-import folium
-import requests
+"""
+Main Flask application for EV route simulation and charger planning
+"""
+# Standard library imports
+import logging
+from typing import Dict, List, Tuple, Any, Optional
 
+# Third-party imports
+from flask import Flask, request, jsonify, render_template
+
+# Local module imports
 from services.map.generateMap import create_map
 from services.route.getRoadRoute import get_road_route, get_road_route_with_waypoints
 from services.route.haversine import haversine
@@ -10,21 +17,47 @@ from services.chargers.findChargingStations import find_charging_stop, plan_mult
 from services.soc.simulateSoc import simulate_soc
 from services.time.calculateTotalTime import calculate_total_time
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 
 # Constants
 ENERGY_CONSUMPTION = 0.2  # kWh per km
 AVG_SPEED = 90  # km/h
 
-@app.route('/calculate', methods=['POST'])
-def calculate_route():
-    """Main endpoint for calculating EV routes"""
+@app.route('/')
+def index() -> str:
+    """
+    Serve the index page
+    
+    Returns:
+        Rendered HTML template
+    """
+    return render_template('index.html')
+
+@app.route('/calculate', methods=['POST', 'GET'])
+def calculate_route() -> Dict[str, Any]:
+    """
+    Main endpoint for calculating EV routes
+    
+    Returns:
+        JSON response with route data or error
+    """
+    if request.method == 'GET':
+        # For GET requests, just return a default map
+        default_map = create_map([[]], [[]], [], ["59.3293", "18.0686"], ["58.4239", "15.6188"], AVG_SPEED)
+        return {"map_html": default_map}
+    
+    # For POST requests, process the route calculation
     data = request.get_json()
     
     # Get the routing strategy from request or default to 'standard'
     strategy = data.get('routingStrategy', 'standard')
     
     try:
+        logger.info(f"Calculating route with strategy: {strategy}")
         if strategy == 'standard':
             return standard_route_planning(data)
         elif strategy == 'optimized_waypoints':
@@ -37,13 +70,19 @@ def calculate_route():
             return {"error": f"Unknown routing strategy: {strategy}"}, 400
     
     except Exception as e:
-        print(f"Error calculating route: {str(e)}")
+        logger.error(f"Error calculating route: {str(e)}")
         return {"error": str(e)}, 400
 
-def optimized_waypoints_routing():
-    """Calculate route with optimized waypoints using OSRM"""
-    data = request.get_json()
+def optimized_waypoints_routing(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Calculate route with optimized waypoints using OSRM
     
+    Args:
+        data: Request data containing route parameters
+        
+    Returns:
+        Dictionary with route data
+    """
     try:
         start = data["start"].split(",")
         end = data["end"].split(",")
@@ -51,9 +90,6 @@ def optimized_waypoints_routing():
         max_kw = data["maxKw"]
         battery_capacity = float(data['battery'])
         initial_soc = float(data.get('soc', 80))
-        
-        MIN_KW = min_kw
-        MAX_KW = max_kw
         
         # Get direct route first to estimate energy needs
         direct_route = get_road_route(start, end)
@@ -71,7 +107,7 @@ def optimized_waypoints_routing():
         # Find multiple charging stops for the journey using the improved algorithm
         charging_stops = plan_multiple_charging_stops(
             direct_route, initial_soc, battery_capacity, 
-            ENERGY_CONSUMPTION, MIN_KW, MAX_KW, AVG_SPEED
+            ENERGY_CONSUMPTION, min_kw, max_kw, AVG_SPEED
         )
         
         if not charging_stops:
@@ -124,13 +160,19 @@ def optimized_waypoints_routing():
         }
     
     except Exception as e:
-        print(f"Error in optimized routing: {str(e)}")
+        logger.error(f"Error in optimized routing: {str(e)}")
         return {"error": str(e)}, 400
     
-def standard_route_planning(data):
+def standard_route_planning(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Basic route planning with sequential charging stops.
     This is the original algorithm with improvements.
+    
+    Args:
+        data: Request data containing route parameters
+        
+    Returns:
+        Dictionary with route data
     """
     try:
         start = data["start"].split(",")
@@ -139,9 +181,6 @@ def standard_route_planning(data):
         max_kw = data["maxKw"]
         battery_capacity = float(data['battery'])
         initial_soc = float(data.get('soc', 80))
-        
-        MIN_KW = min_kw
-        MAX_KW = max_kw
         
         # Get direct route first
         direct_route = get_road_route(start, end)
@@ -154,9 +193,10 @@ def standard_route_planning(data):
         temp_soc_values = soc_values
         
         while True:
+            logger.debug("Finding charging stop")
             charging_stop = find_charging_stop(
                 temp_route, temp_soc_values, battery_capacity, 
-                ENERGY_CONSUMPTION, MIN_KW, MAX_KW, AVG_SPEED
+                ENERGY_CONSUMPTION, min_kw, max_kw, AVG_SPEED
             )
             
             if not charging_stop:
@@ -230,12 +270,18 @@ def standard_route_planning(data):
         }
     
     except Exception as e:
-        print(f"Error in standard route planning: {str(e)}")
+        logger.error(f"Error in standard route planning: {str(e)}")
         return {"error": str(e)}, 400
 
-def dijkstra_route_planning(data):
+def dijkstra_route_planning(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Use Dijkstra-based algorithm for route planning
+    
+    Args:
+        data: Request data containing route parameters
+        
+    Returns:
+        Dictionary with route data
     """
     try:
         start = data["start"].split(",")
@@ -281,12 +327,18 @@ def dijkstra_route_planning(data):
         }
         
     except Exception as e:
-        print(f"Error in Dijkstra route planning: {str(e)}")
+        logger.error(f"Error in Dijkstra route planning: {str(e)}")
         return {"error": str(e)}, 400
 
-def time_efficient_route(data):
+def time_efficient_route(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Find the most time-efficient route balancing driving and charging times
+    
+    Args:
+        data: Request data containing route parameters
+        
+    Returns:
+        Dictionary with route data
     """
     try:
         start = data["start"].split(",")
@@ -459,7 +511,7 @@ def time_efficient_route(data):
         }
         
     except Exception as e:
-        print(f"Error in time-efficient route planning: {str(e)}")
+        logger.error(f"Error in time-efficient route planning: {str(e)}")
         return {"error": str(e)}, 400
 
 

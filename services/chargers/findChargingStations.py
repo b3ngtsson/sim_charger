@@ -1,6 +1,9 @@
-from typing import Dict, List, Optional
+# Standard library imports
 import logging
+import math
+from typing import Dict, List, Optional
 
+# Local module imports
 from services.chargers.getChargingStations import get_charging_stations
 from services.route.getRoadRoute import get_road_route
 from services.route.haversine import haversine
@@ -8,15 +11,44 @@ from services.route.haversine import haversine
 logger = logging.getLogger(__name__)
 
 def find_charging_stop(route: List[List[float]], soc_values: List[float], battery_capacity: float, 
-                       energyConsumption: float, minKw: int, maxKw: int, speed: float) -> Optional[Dict]:
-    """Find optimal charging station along the route with improved station selection"""
-    for i, (point, soc) in enumerate(zip(route, soc_values)):
-        # Check more frequently on longer routes
-        check_frequency = max(10, min(100, len(route) // 20))
+                       energy_consumption: float, min_kw: int, max_kw: int, speed: float) -> Optional[Dict]:
+    """
+    Find optimal charging station along the route with improved station selection
+    
+    Args:
+        route: List of coordinate points along the route
+        soc_values: List of state of charge values at each point
+        battery_capacity: Battery capacity in kWh
+        energy_consumption: Energy consumption in kWh per km
+        min_kw: Minimum charging power in kW
+        max_kw: Maximum charging power in kW
+        speed: Average speed in km/h
         
-        if i % check_frequency == 0 and soc < 30:  # Start looking earlier at 30% SOC
+    Returns:
+        Dictionary with charging station details or None if no suitable station found
+    """
+    # Track distance traveled to check every 10km
+    distance_traveled = 0
+    last_check_distance = 0
+    
+    for i, (point, soc) in enumerate(zip(route, soc_values)):
+        # Calculate distance traveled so far
+        if i > 0:
+            distance_traveled += haversine(route[i-1], point)
+        
+        # Check for charging stations every 30km or if SOC is critically low
+        check_distance = 30  # km
+        if soc < 15:  # Critical SOC, check more frequently
+            check_distance = 5  # km
+            
+        # Only check if we've traveled at least check_distance km since last check
+        if (distance_traveled - last_check_distance) >= check_distance or soc < 15:
+            logger.debug(f"distance: {distance_traveled - last_check_distance}")
+            logger.debug(f"check_distance: {check_distance}")
+            logger.debug(f"soc: {soc}")
+            last_check_distance = distance_traveled
             remaining_distance = sum(haversine(route[j], route[j+1]) for j in range(i, len(route)-1))
-            energy_needed = remaining_distance * energyConsumption
+            energy_needed = remaining_distance * energy_consumption
             soc_needed = (energy_needed / battery_capacity) * 100
 
             # If we have enough SOC to reach destination with buffer, continue
@@ -25,22 +57,27 @@ def find_charging_stop(route: List[List[float]], soc_values: List[float], batter
 
             # Calculate ideal charging location - look further ahead on the route
             # based on current SOC and consumption rate
-            distance_to_search = (soc - 15) / 100 * battery_capacity / energyConsumption
+            distance_to_search = (soc - 15) / 100 * battery_capacity / energy_consumption
+            logger.debug(f"distance to search {distance_to_search}")
             search_points = []
             
             # Get multiple potential search points along the route
             current_dist = 0
             search_index = i
             
-            # Find points at ~10km intervals within our range
-            while current_dist < distance_to_search and search_index < len(route) - 1:
-                if current_dist > 0 and current_dist % 10 < 2:  # Every ~10km
+            search_points.append(route[i])
+            # Find points at regular intervals within our range
+            """ while current_dist < distance_to_search and search_index < len(route) - 1:
+                if current_dist > 0 and current_dist % 30:  # Every ~10km
+                    logger.debug(f"current dist 1 : {search_index}")
                     search_points.append(route[search_index])
                 
                 if search_index + 1 < len(route):
                     current_dist += haversine(route[search_index], route[search_index+1])
+                    logger.debug(f"current dist 2 : {current_dist}")
                 search_index += 1
-            
+             """
+            logger.debug(f"search_index length: {len(search_points)}")
             # If no search points found within our range, use the furthest possible point
             if not search_points and search_index < len(route):
                 search_points.append(route[search_index])
@@ -48,16 +85,18 @@ def find_charging_stop(route: List[List[float]], soc_values: List[float], batter
             # Find stations near all search points
             all_stations = []
             for search_point in search_points:
-                nearby_stations = get_charging_stations(search_point[0], search_point[1], 15, minKw, maxKw)
+                logger.debug(f"search_point {search_point}")
+                nearby_stations = get_charging_stations(search_point[0], search_point[1], 10, min_kw, max_kw)
                 for station in nearby_stations:
+
                     # Calculate detour factors
                     detour_route = get_road_route(point, station["location"])
                     detour_distance = sum(haversine(detour_route[j], detour_route[j+1]) 
                                          for j in range(len(detour_route)-1))
                     detour_time = (detour_distance / speed) * 60
-                    
+
                     # Calculate time to charge
-                    energy_used_detour = detour_distance * energyConsumption
+                    energy_used_detour = detour_distance * energy_consumption
                     soc_after_detour = soc - (energy_used_detour / battery_capacity) * 100
                     soc_after_detour = max(soc_after_detour, 0)
                     
@@ -80,7 +119,7 @@ def find_charging_stop(route: List[List[float]], soc_values: List[float], batter
                     
                     # Time efficiency score - balance detour time and charging time
                     time_efficiency = detour_time + charge_time + route_deviation_penalty
-                    
+                    logger.debug(f"time_efficiency: {time_efficiency}")
                     # Ensure we can reach this station with current SOC
                     if soc_after_detour > 10:
                         all_stations.append({
@@ -94,19 +133,34 @@ def find_charging_stop(route: List[List[float]], soc_values: List[float], batter
                         })
             
             # Sort by efficiency score and return the best station
+            logger.debug(f"all_stations: {all_stations}")
             if all_stations:
                 # Sort by efficiency (lower is better)
                 best_station = min(all_stations, key=lambda x: x["efficiency_score"])
                 return best_station
-                
+
+          
     return None
 
-# Alternative implementation that considers the full route with multiple charging stops
 def plan_multiple_charging_stops(route: List[List[float]], initial_soc: float, battery_capacity: float,
-                              energyConsumption: float, minKw: int, maxKw: int, speed: float) -> List[Dict]:
-    """Plan multiple charging stops for the entire route at once"""
+                              energy_consumption: float, min_kw: int, max_kw: int, speed: float) -> List[Dict]:
+    """
+    Plan multiple charging stops for the entire route at once
+    
+    Args:
+        route: List of coordinate points along the route
+        initial_soc: Initial state of charge as percentage
+        battery_capacity: Battery capacity in kWh
+        energy_consumption: Energy consumption in kWh per km
+        min_kw: Minimum charging power in kW
+        max_kw: Maximum charging power in kW
+        speed: Average speed in km/h
+        
+    Returns:
+        List of dictionaries with charging stop details
+    """
     total_distance = sum(haversine(route[i], route[i+1]) for i in range(len(route)-1))
-    total_energy = total_distance * energyConsumption
+    total_energy = total_distance * energy_consumption
     
     # If we can make it with the initial charge, no stops needed
     if (initial_soc / 100) * battery_capacity >= (total_energy + 0.1 * battery_capacity):
@@ -140,7 +194,7 @@ def plan_multiple_charging_stops(route: List[List[float]], initial_soc: float, b
     
     for i in range(len(route)-1):
         distance = haversine(route[i], route[i+1])
-        energy_used = distance * energyConsumption
+        energy_used = distance * energy_consumption
         soc_drop = (energy_used / battery_capacity) * 100
         current_soc -= soc_drop
         current_soc = max(current_soc, 0)
@@ -174,7 +228,7 @@ def plan_multiple_charging_stops(route: List[List[float]], initial_soc: float, b
             mid_point = route[mid_idx]
             
             # Get stations within 15km
-            stations = get_charging_stations(mid_point[0], mid_point[1], 15, minKw, maxKw)
+            stations = get_charging_stations(mid_point[0], mid_point[1], 15, min_kw, max_kw)
             
             if stations:
                 # Choose the station with highest power for efficiency
@@ -186,7 +240,7 @@ def plan_multiple_charging_stops(route: List[List[float]], initial_soc: float, b
                                     for j in range(len(route_to_station)-1))
                 
                 # Calculate energy used and SOC after reaching the station
-                energy_to_station = station_distance * energyConsumption
+                energy_to_station = station_distance * energy_consumption
                 soc_at_station = current_soc - (energy_to_station / battery_capacity) * 100
                 soc_at_station = max(soc_at_station, 0)
                 
@@ -212,7 +266,7 @@ def plan_multiple_charging_stops(route: List[List[float]], initial_soc: float, b
         
         # Update the SOC after this segment
         segment_distance = segment["distance"]
-        energy_used = segment_distance * energyConsumption
+        energy_used = segment_distance * energy_consumption
         soc_used = (energy_used / battery_capacity) * 100
         current_soc -= soc_used
         current_soc = max(current_soc, 0)
